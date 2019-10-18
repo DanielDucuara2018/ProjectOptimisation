@@ -8,7 +8,9 @@ import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.xml.stream.FactoryConfigurationError;
 import javax.xml.stream.XMLStreamException;
@@ -23,16 +25,16 @@ import problem.ProblemParserXML;
 import problem.Satellite;
 
 /**
- * Class implementing a download planner which tries to insert downloads into the plan
- * by ordering acquisitions following an increasing order of their realization time, and by
- * considering download windows chronologically 
+ * Class implementing a download planner which tries to insert downloads into
+ * the plan by ordering acquisitions following an increasing order of their
+ * realization time, and by considering download windows chronologically
+ * 
  * @author cpralet
  *
  */
 public class BadDownloadPlanner {
 
-	
-	public static void planDownloads(SolutionPlan plan, String solutionFilename) throws IOException{
+	public static void planDownloads(SolutionPlan plan, String solutionFilename) throws IOException {
 
 		PlanningProblem pb = plan.pb;
 		List<CandidateAcquisition> acqPlan = plan.plannedAcquisitions;
@@ -40,29 +42,33 @@ public class BadDownloadPlanner {
 		PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(solutionFilename, false)));
 
 		boolean firstLine = true;
+		double totalTimeOnBoard = 0;
+		int totalNumberAcquisitionDownloaded = 0;
 
-		// plan downloads for each satellite independently (solution which might violate some constraints for large constellations)
-		for(Satellite satellite : pb.satellites){
+		// plan downloads for each satellite independently (solution which might violate
+		// some constraints for large constellations)
+		for (Satellite satellite : pb.satellites) {
 			// get all recorded acquisitions associated with this satellite
 			List<Acquisition> candidateDownloads = new ArrayList<Acquisition>();
-			for(RecordedAcquisition dl : pb.recordedAcquisitions){				
-				if(dl.satellite == satellite)
+			for (RecordedAcquisition dl : pb.recordedAcquisitions) {
+				if (dl.satellite == satellite)
+					// System.out.println(dl.getAcquisitionTime());
 					candidateDownloads.add(dl);
 			}
 			// get all planned acquisitions associated with this satellite
-			for(CandidateAcquisition a : acqPlan){
-				if(a.selectedAcquisitionWindow.satellite == satellite)
+			for (CandidateAcquisition a : acqPlan) {
+				if (a.selectedAcquisitionWindow.satellite == satellite)
 					candidateDownloads.add(a);
 			}
 			// sort acquisitions by increasing start time
-			Collections.sort(candidateDownloads, new Comparator<Acquisition>(){
+			Collections.sort(candidateDownloads, new Comparator<Acquisition>() {
 				@Override
 				public int compare(Acquisition a0, Acquisition a1) {
-					double start0 = a0.getAcquisitionTime(); 
+					double start0 = a0.getAcquisitionTime();
 					double start1 = a1.getAcquisitionTime();
-					if(start0 < start1)
+					if (start0 < start1)
 						return -1;
-					if(start0 > start1)
+					if (start0 > start1)
 						return 1;
 					return 0;
 				}
@@ -71,70 +77,118 @@ public class BadDownloadPlanner {
 
 			// sort download windows by increasing start time
 			List<DownloadWindow> downloadWindows = new ArrayList<DownloadWindow>();
-			for(DownloadWindow w : pb.downloadWindows){
-				if(w.satellite == satellite)
+			for (DownloadWindow w : pb.downloadWindows) {
+				if (w.satellite == satellite)
 					downloadWindows.add(w);
 			}
-			Collections.sort(downloadWindows, new Comparator<DownloadWindow>(){
+			Collections.sort(downloadWindows, new Comparator<DownloadWindow>() {
 				@Override
 				public int compare(DownloadWindow a0, DownloadWindow a1) {
-					double start0 = a0.start; 
+					double start0 = a0.start;
 					double start1 = a1.start;
-					if(start0 < start1)
+					if (start0 < start1)
 						return -1;
-					if(start0 > start1)
+					if (start0 > start1)
 						return 1;
 					return 0;
 				}
-			});			
-			if(downloadWindows.isEmpty())
+			});
+			if (downloadWindows.isEmpty())
 				continue;
 
-			// chronological traversal of all download windows combined with a chronological traversal of acquisitions which are candidate for being downloaded
-			int currentDownloadWindowIdx = 0;
-			DownloadWindow currentWindow = downloadWindows.get(currentDownloadWindowIdx);
-			double currentTime = currentWindow.start;
-			for(Acquisition a : candidateDownloads){
-				currentTime = Math.max(currentTime, a.getAcquisitionTime());
-				double dlDuration = a.getVolume() / Params.downlinkRate;
-				while(currentTime + dlDuration > currentWindow.end){					
-					currentDownloadWindowIdx++;
-					if(currentDownloadWindowIdx < downloadWindows.size()){
-						currentWindow = downloadWindows.get(currentDownloadWindowIdx);
-						currentTime = Math.max(currentTime, currentWindow.start);
+			Map<Double, Acquisition> candidateDl;
+			double lastTimeDownloadWindow = 0;
+			for (DownloadWindow w : downloadWindows) {
+				double startTime = Math.max(w.start, lastTimeDownloadWindow);
+				double endTime = w.end;
+				double max = 0;
+				do {
+					candidateDl = new HashMap<Double, Acquisition>();
+					for (Acquisition a : candidateDownloads) {
+						double dlDuration = a.getVolume() / Params.downlinkRate;
+						double timeOnBoard = startTime - a.getAcquisitionTime();
+						if (a.getAcquisitionTime() < startTime && (dlDuration + startTime) < endTime) {
+							candidateDl.put(timeOnBoard, a);
+						}
 					}
-					else
-						break;
-				}
-				
-				if(currentDownloadWindowIdx >= downloadWindows.size())
-					break;
+					if (!candidateDl.isEmpty()) {
+						max = Collections.max(candidateDl.keySet());
+						Acquisition a = candidateDl.get(max);
+						totalTimeOnBoard += startTime - a.getAcquisitionTime();
+						totalNumberAcquisitionDownloaded++;
 
-				if(firstLine){
-					firstLine = false;
-				}
-				else 
-					writer.write("\n");
-				if(a instanceof RecordedAcquisition)
-					writer.write("REC " + ((RecordedAcquisition) a).idx + " " + currentWindow.idx + " " + currentTime + " " + (currentTime+dlDuration));
-				else // case CandidateAcquisition
-					writer.write("CAND " + ((CandidateAcquisition) a).idx + " " + currentWindow.idx + " " + currentTime + " " + (currentTime+dlDuration));
-				currentTime += dlDuration;
+						double dlDuration = a.getVolume() / Params.downlinkRate;
+
+						if (firstLine) {
+							firstLine = false;
+						} else
+							writer.write("\n");
+						if (a instanceof RecordedAcquisition)
+							writer.write("REC " + ((RecordedAcquisition) a).idx + " " + w.idx + " " + startTime + " "
+									+ (startTime + dlDuration));
+						else // case CandidateAcquisition
+							writer.write("CAND " + ((CandidateAcquisition) a).idx + " " + w.idx + " " + startTime + " "
+									+ (startTime + dlDuration));
+
+						startTime += dlDuration;
+
+						System.out.println("Eliminado? " + candidateDownloads.remove(a));
+					}
+
+				} while (!candidateDl.isEmpty());
+				lastTimeDownloadWindow = startTime;
 			}
+			// chronological traversal of all download windows combined with a chronological
+			// traversal of acquisitions which are candidate for being downloaded
+//			int currentDownloadWindowIdx = 0;
+//			DownloadWindow currentWindow = downloadWindows.get(currentDownloadWindowIdx);
+//			double currentTime = currentWindow.start;
+//			for(Acquisition a : candidateDownloads){
+//				currentTime = Math.max(currentTime, a.getAcquisitionTime());
+//				double dlDuration = a.getVolume() / Params.downlinkRate;
+//				while(currentTime + dlDuration > currentWindow.end){					
+//					currentDownloadWindowIdx++;
+//					if(currentDownloadWindowIdx < downloadWindows.size()){
+//						currentWindow = downloadWindows.get(currentDownloadWindowIdx);
+//						currentTime = Math.max(currentTime, currentWindow.start);
+//					}
+//					else
+//						break;
+//				}
+//				
+//				if(currentDownloadWindowIdx >= downloadWindows.size())
+//					break;
+//
+//				if(firstLine){
+//					firstLine = false;
+//				}
+//				else 
+//					writer.write("\n");
+//				
+//				totalTimeOnBoard += currentTime - a.getAcquisitionTime();
+//				totalNumberAcquisitionDownloaded ++;				
+//				
+//				if(a instanceof RecordedAcquisition)
+//					writer.write("REC " + ((RecordedAcquisition) a).idx + " " + currentWindow.idx + " " + currentTime + " " + (currentTime+dlDuration));
+//				else // case CandidateAcquisition
+//					writer.write("CAND " + ((CandidateAcquisition) a).idx + " " + currentWindow.idx + " " + currentTime + " " + (currentTime+dlDuration));
+//				currentTime += dlDuration;
+//			}
 		}
+		System.out.println("Average time on board " + totalTimeOnBoard / totalNumberAcquisitionDownloaded);
 		writer.flush();
 		writer.close();
 	}
 
-	
-	public static void main(String[] args) throws XMLStreamException, FactoryConfigurationError, IOException, ParseException{
-		ProblemParserXML parser = new ProblemParserXML(); 
-		PlanningProblem pb = parser.read(Params.systemDataFile,Params.planningDataFile);
+	public static void main(String[] args)
+			throws XMLStreamException, FactoryConfigurationError, IOException, ParseException {
+		ProblemParserXML parser = new ProblemParserXML();
+		PlanningProblem pb = parser.read(Params.systemDataFile, Params.planningDataFile);
 		SolutionPlan plan = new SolutionPlan(pb);
 		int nSatellites = pb.satellites.size();
-		for(int i=1;i<=nSatellites;i++)
-			plan.readAcquisitionPlan("output/solutionAcqPlan_SAT"+i+".txt");			
-		planDownloads(plan,"output/downloadPlan.txt");				
+		for (int i = 1; i <= nSatellites; i++)
+			plan.readAcquisitionPlan("output/solutionAcqPlan_SAT" + i + ".txt");
+		planDownloads(plan, "output/downloadPlan.txt");
 	}
-	
+
 }
