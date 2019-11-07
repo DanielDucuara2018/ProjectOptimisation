@@ -3,9 +3,9 @@ package params;
 public class Params {
 
 	/** Constellation considered */
-	public final static String constellation = "02sat";
+	//public final static String constellation = "02sat";
 	//public final static String constellation = "08sat";
-	//public final static String constellation = "18sat";
+	public final static String constellation = "18sat";
 	/** Planning horizon considered */
 	public final static String horizon = "04h"; 
 	//public final static String horizon = "12h";

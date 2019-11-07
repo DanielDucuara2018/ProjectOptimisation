@@ -86,6 +86,11 @@ public class CandidateAcquisition extends Acquisition {
 	}
 	
 	@Override
+	public double getPriority() {
+		return super.priority;
+	}
+	
+	@Override
 	public String toString(){
 		return name + ": " + acquisitionWindows;
 	}

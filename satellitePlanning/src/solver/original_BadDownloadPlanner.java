@@ -32,7 +32,7 @@ import problem.Satellite;
  * @author cpralet
  *
  */
-public class BadDownloadPlanner {
+public class original_BadDownloadPlanner {
 
 	public static void planDownloads(SolutionPlan plan, String solutionFilename) throws IOException {
 
@@ -61,29 +61,22 @@ public class BadDownloadPlanner {
 			for (CandidateAcquisition a : acqPlan) {
 				if (a.selectedAcquisitionWindow.satellite == satellite)
 					candidateDownloads.add(a);
-			}			
-			 
-			// Determinate priority and non priority acquisitions
-			List<Acquisition> nonPrioCandidateDownloads = new ArrayList<Acquisition>();
-			List<Acquisition> prioCandidateDownloads = new ArrayList<Acquisition>();
-			for (Acquisition cd : candidateDownloads) {
-				if(cd.getPriority() == 0) prioCandidateDownloads.add(cd);
-				else nonPrioCandidateDownloads.add(cd);	
 			}
-			
-			//sort priority acquisitions by increasing start time
-			prioCandidateDownloads = sortFunction(prioCandidateDownloads);
-			//sort non priority acquisitions by increasing start time
-			nonPrioCandidateDownloads = sortFunction(nonPrioCandidateDownloads);
-			
-			//contenate priority and non priority acquisition list
-			candidateDownloads = new ArrayList<Acquisition>(prioCandidateDownloads);
-			candidateDownloads.addAll(nonPrioCandidateDownloads);
-			
-			for (Acquisition cd : candidateDownloads) {
-				System.out.println(cd.getPriority() + " " + cd.getAcquisitionTime());
-			}
-			
+			// sort acquisitions by increasing start time
+			Collections.sort(candidateDownloads, new Comparator<Acquisition>() {
+				@Override
+				public int compare(Acquisition a0, Acquisition a1) {
+					double start0 = a0.getAcquisitionTime();
+					double start1 = a1.getAcquisitionTime();
+					if (start0 < start1)
+						return -1;
+					if (start0 > start1)
+						return 1;
+					return 0;
+				}
+
+			});
+
 			// sort download windows by increasing start time
 			List<DownloadWindow> downloadWindows = new ArrayList<DownloadWindow>();
 			for (DownloadWindow w : pb.downloadWindows) {
@@ -104,80 +97,55 @@ public class BadDownloadPlanner {
 			});
 			if (downloadWindows.isEmpty())
 				continue;
-			
+
 			totalCandidates += candidateDownloads.size();
 			
-			Map<Double, Acquisition> candidateDl;			
-			double lastTimeDownloadWindow = 0;
-			for (DownloadWindow w : downloadWindows) {
-				double startTime = Math.max(w.start, lastTimeDownloadWindow);
-				double endTime = w.end;
-				double max = 0;
-				do {
-					candidateDl = new HashMap<Double, Acquisition>();
-					for (Acquisition a : candidateDownloads) {
-						double dlDuration = a.getVolume() / Params.downlinkRate;
-						double timeOnBoard = startTime - a.getAcquisitionTime();
-						if (a.getAcquisitionTime() < startTime && (dlDuration + startTime) < endTime) {
-							candidateDl.put(timeOnBoard, a);
-						}
+			// chronological traversal of all download windows combined with a chronological
+			// traversal of acquisitions which are candidate for being downloaded
+			int currentDownloadWindowIdx = 0;
+			DownloadWindow currentWindow = downloadWindows.get(currentDownloadWindowIdx);
+			double currentTime = currentWindow.start;
+			for(Acquisition a : candidateDownloads){
+				currentTime = Math.max(currentTime, a.getAcquisitionTime());
+				double dlDuration = a.getVolume() / Params.downlinkRate;
+				while(currentTime + dlDuration > currentWindow.end){					
+					currentDownloadWindowIdx++;
+					if(currentDownloadWindowIdx < downloadWindows.size()){
+						currentWindow = downloadWindows.get(currentDownloadWindowIdx);
+						currentTime = Math.max(currentTime, currentWindow.start);
 					}
-					if (!candidateDl.isEmpty()) {
-						max = Collections.max(candidateDl.keySet());
-						Acquisition a = candidateDl.get(max);
-						
+					else
+						break;
+				}
+				
+				if(currentDownloadWindowIdx >= downloadWindows.size())
+					break;
 
-						double dlDuration = a.getVolume() / Params.downlinkRate;
-
-						if (firstLine) {
-							firstLine = false;
-						} else
-							writer.write("\n");
-						
-						totalTimeOnBoard += startTime - a.getAcquisitionTime();
-						totalNumberAcquisitionDownloaded++;
-						
-						if (a instanceof RecordedAcquisition)
-							writer.write("REC " + ((RecordedAcquisition) a).idx + " " + w.idx + " " + startTime + " "
-									+ (startTime + dlDuration));
-						else // case CandidateAcquisition
-							writer.write("CAND " + ((CandidateAcquisition) a).idx + " " + w.idx + " " + startTime + " "
-									+ (startTime + dlDuration));
-
-						startTime += dlDuration;
-						candidateDownloads.remove(a);					
-					}
-
-				} while (!candidateDl.isEmpty());
-				lastTimeDownloadWindow = startTime;
+				if(firstLine){
+					firstLine = false;
+				}
+				else 
+					writer.write("\n");
+				
+				totalTimeOnBoard += currentTime - a.getAcquisitionTime();
+				totalNumberAcquisitionDownloaded ++;				
+				
+				if(a instanceof RecordedAcquisition)
+					writer.write("REC " + ((RecordedAcquisition) a).idx + " " + currentWindow.idx + " " + currentTime + " " + (currentTime+dlDuration));
+				else // case CandidateAcquisition
+					writer.write("CAND " + ((CandidateAcquisition) a).idx + " " + currentWindow.idx + " " + currentTime + " " + (currentTime+dlDuration));
+				currentTime += dlDuration;
 			}
-			System.out.println("candidate sin vaciar " + candidateDownloads.size());
+			
 			
 		}
 		
 		System.out.println("Average time on board " + totalTimeOnBoard / totalNumberAcquisitionDownloaded + " Acquisition Downloaded " + totalNumberAcquisitionDownloaded);
 		System.out.println("candidate inicial " + totalCandidates);
-		writer.flush();
+		writer.flush();		
 		writer.close();
 	}
 	
-	public static List<Acquisition> sortFunction(List<Acquisition> a) {
-		// sort acquisitions by increasing start time
-		Collections.sort(a, new Comparator<Acquisition>() {
-			@Override
-			public int compare(Acquisition a0, Acquisition a1) {
-				double start0 = a0.getAcquisitionTime();
-				double start1 = a1.getAcquisitionTime();
-				if (start0 < start1)
-					return -1;
-				if (start0 > start1)
-					return 1;
-				return 0;
-			}
-
-		});
-		return a;
-	}
 
 	public static void main(String[] args)
 			throws XMLStreamException, FactoryConfigurationError, IOException, ParseException {

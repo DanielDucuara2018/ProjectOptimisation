@@ -53,5 +53,9 @@ public abstract class Acquisition {
 	 */
 	public abstract long getVolume();
 	
-	
+	/**
+	 * 
+	 * @return the Priority of the acquisition
+	 */
+	public abstract double getPriority(); 
 }

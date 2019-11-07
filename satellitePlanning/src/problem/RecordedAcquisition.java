@@ -40,6 +40,11 @@ public class RecordedAcquisition extends Acquisition {
 	public double getAcquisitionTime() {
 		return acquisitionTime;
 	}
+	
+	@Override
+	public double getPriority() {
+		return super.priority;
+	}
 
 	@Override
 	public long getVolume() {
