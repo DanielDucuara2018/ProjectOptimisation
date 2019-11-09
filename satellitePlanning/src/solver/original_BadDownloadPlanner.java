@@ -35,7 +35,9 @@ import problem.Satellite;
 public class original_BadDownloadPlanner {
 
 	public static void planDownloads(SolutionPlan plan, String solutionFilename) throws IOException {
-
+		long startT, endT, totalT;
+		int downloadedPriority = 0 , downloadedNonPriority = 0;
+		
 		PlanningProblem pb = plan.pb;
 		List<CandidateAcquisition> acqPlan = plan.plannedAcquisitions;
 
@@ -49,6 +51,7 @@ public class original_BadDownloadPlanner {
 		
 		// plan downloads for each satellite independently (solution which might violate
 		// some constraints for large constellations)
+		startT = System.currentTimeMillis();
 		for (Satellite satellite : pb.satellites) {
 			// get all recorded acquisitions associated with this satellite
 			List<Acquisition> candidateDownloads = new ArrayList<Acquisition>();
@@ -130,6 +133,11 @@ public class original_BadDownloadPlanner {
 				totalTimeOnBoard += currentTime - a.getAcquisitionTime();
 				totalNumberAcquisitionDownloaded ++;				
 				
+				if(a.getPriority() == 0.0) 
+					downloadedPriority ++;
+				else	
+					downloadedNonPriority ++;
+				
 				if(a instanceof RecordedAcquisition)
 					writer.write("REC " + ((RecordedAcquisition) a).idx + " " + currentWindow.idx + " " + currentTime + " " + (currentTime+dlDuration));
 				else // case CandidateAcquisition
@@ -139,16 +147,22 @@ public class original_BadDownloadPlanner {
 			
 			
 		}
+		endT = System.currentTimeMillis();
+		totalT = endT-startT;
 		
 		System.out.println("Average time on board " + totalTimeOnBoard / totalNumberAcquisitionDownloaded + " Acquisition Downloaded " + totalNumberAcquisitionDownloaded);
 		System.out.println("candidate inicial " + totalCandidates);
+		
+		System.out.println("Ejecution time " + totalT + " ms");
+		System.out.println("Downloaded Priority: " + downloadedPriority + " Downloaded NON Priority: "+ downloadedNonPriority);
+		
 		writer.flush();		
 		writer.close();
 	}
 	
 
 	public static void main(String[] args)
-			throws XMLStreamException, FactoryConfigurationError, IOException, ParseException {
+		throws XMLStreamException, FactoryConfigurationError, IOException, ParseException {
 		ProblemParserXML parser = new ProblemParserXML();
 		PlanningProblem pb = parser.read(Params.systemDataFile, Params.planningDataFile);
 		SolutionPlan plan = new SolutionPlan(pb);

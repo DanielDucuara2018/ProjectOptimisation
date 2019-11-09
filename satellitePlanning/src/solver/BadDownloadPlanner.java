@@ -35,7 +35,9 @@ import problem.Satellite;
 public class BadDownloadPlanner {
 
 	public static void planDownloads(SolutionPlan plan, String solutionFilename) throws IOException {
-
+		long startT, endT, totalT;
+		int downloadedPriority = 0 , downloadedNonPriority = 0;
+		
 		PlanningProblem pb = plan.pb;
 		List<CandidateAcquisition> acqPlan = plan.plannedAcquisitions;
 
@@ -49,18 +51,27 @@ public class BadDownloadPlanner {
 		
 		// plan downloads for each satellite independently (solution which might violate
 		// some constraints for large constellations)
+		startT = System.currentTimeMillis();
 		for (Satellite satellite : pb.satellites) {
+			long volDownload = 0;
+			
 			// get all recorded acquisitions associated with this satellite
 			List<Acquisition> candidateDownloads = new ArrayList<Acquisition>();
+			
 			for (RecordedAcquisition dl : pb.recordedAcquisitions) {
-				if (dl.satellite == satellite)
+				if (dl.satellite == satellite) {
 					// System.out.println(dl.getAcquisitionTime());
 					candidateDownloads.add(dl);
+					volDownload += dl.getVolume(); 
+				}
 			}
+			
 			// get all planned acquisitions associated with this satellite
 			for (CandidateAcquisition a : acqPlan) {
-				if (a.selectedAcquisitionWindow.satellite == satellite)
+				if (a.selectedAcquisitionWindow.satellite == satellite) {
 					candidateDownloads.add(a);
+					volDownload += a.getVolume();
+				}
 			}			
 			 
 			// Determinate priority and non priority acquisitions
@@ -80,9 +91,11 @@ public class BadDownloadPlanner {
 			candidateDownloads = new ArrayList<Acquisition>(prioCandidateDownloads);
 			candidateDownloads.addAll(nonPrioCandidateDownloads);
 			
-			for (Acquisition cd : candidateDownloads) {
-				System.out.println(cd.getPriority() + " " + cd.getAcquisitionTime());
-			}
+			
+			// print by priority
+//			for (Acquisition cd : candidateDownloads) {
+//				System.out.println(cd.getPriority() + " " + cd.getAcquisitionTime());
+//			}
 			
 			// sort download windows by increasing start time
 			List<DownloadWindow> downloadWindows = new ArrayList<DownloadWindow>();
@@ -134,15 +147,20 @@ public class BadDownloadPlanner {
 						} else
 							writer.write("\n");
 						
+						if(a.getPriority() == 0.0) 
+							downloadedPriority ++;
+						else	
+							downloadedNonPriority ++;
+						
 						totalTimeOnBoard += startTime - a.getAcquisitionTime();
 						totalNumberAcquisitionDownloaded++;
 						
 						if (a instanceof RecordedAcquisition)
 							writer.write("REC " + ((RecordedAcquisition) a).idx + " " + w.idx + " " + startTime + " "
-									+ (startTime + dlDuration));
+									+ (startTime + dlDuration) + " " + dlDuration);
 						else // case CandidateAcquisition
 							writer.write("CAND " + ((CandidateAcquisition) a).idx + " " + w.idx + " " + startTime + " "
-									+ (startTime + dlDuration));
+									+ (startTime + dlDuration) + " " + dlDuration);
 
 						startTime += dlDuration;
 						candidateDownloads.remove(a);					
@@ -151,12 +169,18 @@ public class BadDownloadPlanner {
 				} while (!candidateDl.isEmpty());
 				lastTimeDownloadWindow = startTime;
 			}
-			System.out.println("candidate sin vaciar " + candidateDownloads.size());
+			System.out.println(satellite.name + " candidate sin vaciar " + candidateDownloads.size() );
+			System.out.println("Volume Total a vider " + volDownload);
 			
 		}
+		endT = System.currentTimeMillis();
+		totalT = endT-startT;
 		
 		System.out.println("Average time on board " + totalTimeOnBoard / totalNumberAcquisitionDownloaded + " Acquisition Downloaded " + totalNumberAcquisitionDownloaded);
 		System.out.println("candidate inicial " + totalCandidates);
+		System.out.println("Ejecution time " + totalT + " ms");
+		System.out.println("Downloaded Priority: " + downloadedPriority + " Downloaded NON Priority: "+ downloadedNonPriority);
+		
 		writer.flush();
 		writer.close();
 	}

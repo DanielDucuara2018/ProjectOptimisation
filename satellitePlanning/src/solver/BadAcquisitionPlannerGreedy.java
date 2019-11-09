@@ -166,7 +166,7 @@ public class BadAcquisitionPlannerGreedy {
 		SatellitePlan plan = satellitePlans.get(satellite);
 		for(AcquisitionWindow aw : plan.getAcqWindows()){
 			double start = plan.getStart(aw);
-			writer.write(aw.candidateAcquisition.idx + " " + aw.idx + " " + start + " " + (start+aw.duration) + "\n");
+			writer.write(aw.candidateAcquisition.idx + " " + aw.idx + " " + start + " " + (start+aw.duration) + " " + aw.candidateAcquisition.getVolume() + "\n");
 		}
 		writer.flush();
 		writer.close();
